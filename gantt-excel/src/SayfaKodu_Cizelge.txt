@@ -1,0 +1,99 @@
+' =============================================================================
+' BU KOD BIR MODUL DEGILDIR - ICE AKTARILMAZ.
+'
+' VBA duzenleyicide sol taraftaki agactan "Cizelge" sayfasina CIFT TIKLA ve
+' asagidaki kodu acilan pencereye YAPISTIR.
+'
+' Sayfa olaylari (cift tiklama, sag tiklama) ancak sayfanin kendi kod
+' modulunde tanimlanirsa calisir; standart .bas modulune konamaz.
+' =============================================================================
+Option Explicit
+
+'------------------------------------------------------------------------------
+' CIFT TIKLAMA
+'   - Gun basligina  -> o gunu idari tatil yap / tatili kaldir
+'   - Gun hucresine  -> o tarihte yeni gorev ekle
+'   - Gorev adina    -> gorevi duzenle
+'------------------------------------------------------------------------------
+Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
+    On Error GoTo Bitir
+
+    ' Gun basligi satiri
+    If modGezinme.GunBasligiTiklandi(Target) Then
+        Cancel = True
+        Exit Sub
+    End If
+
+    ' Gorev adi sutunu -> duzenle
+    If Target.Column = C_GOREV And Target.Row >= R_VERI_BAS Then
+        Dim gid As Long
+        gid = SatirdakiGorevID(Target.Row)
+        If gid > 0 Then
+            modGorev.GorevDuzenleAc gid
+            Cancel = True
+            Exit Sub
+        End If
+    End If
+
+    ' Gun hucresi -> yeni gorev
+    If modGezinme.GunHucresiTiklandi(Target) Then
+        Cancel = True
+        Exit Sub
+    End If
+
+Bitir:
+End Sub
+
+'------------------------------------------------------------------------------
+' SAG TIKLAMA - gorev satirinda kisayol menusu yerine islem sorar
+'------------------------------------------------------------------------------
+Private Sub Worksheet_BeforeRightClick(ByVal Target As Range, Cancel As Boolean)
+    Dim gid As Long, secim As String
+
+    On Error GoTo Bitir
+    If Target.Row < R_VERI_BAS Then Exit Sub
+    If Target.Column < C_KATEGORI Or Target.Column > C_ONCEKI Then Exit Sub
+
+    gid = SatirdakiGorevID(Target.Row)
+    If gid = 0 Then Exit Sub
+
+    Cancel = True
+    secim = InputBox( _
+        "Ne yapmak istiyorsun?" & vbCrLf & vbCrLf & _
+        "  1 - Gorevi duzenle" & vbCrLf & _
+        "  2 - Yorumlari ac" & vbCrLf & _
+        "  3 - Gecikme kaydi" & vbCrLf & _
+        "  4 - Gorevi sil" & vbCrLf & vbCrLf & _
+        "Numara gir:", APP_ADI, "1")
+
+    Select Case Trim$(secim)
+        Case "1": modGorev.GorevDuzenleAc gid
+        Case "2": modYorum.DetayAc gid
+        Case "3": modGecikme.GecikmePaneliAc gid
+        Case "4": modGorev.GorevSilSor gid
+    End Select
+
+Bitir:
+End Sub
+
+'------------------------------------------------------------------------------
+' Ekrandaki bir satirin hangi goreve ait oldugunu bulur.
+' Cizim sirasi veri sirasiyla ayni oldugu icin satirdaki gorev adi ve sira
+' numarasi uzerinden eslestirme yapilir.
+'------------------------------------------------------------------------------
+Private Function SatirdakiGorevID(ByVal satir As Long) As Long
+    Dim ad As String, sira As Long, ws As Worksheet, i As Long
+
+    ad = Trim$(CStr(Me.Cells(satir, C_GOREV).Value))
+    sira = CLng(Val(Me.Cells(satir, C_SIRA).Value))
+    If Len(ad) = 0 Then Exit Function
+
+    Set ws = modVeri.Sayfa(SH_GOREVLER)
+    For i = 2 To modVeri.SonSatir(ws)
+        If StrComp(CStr(ws.Cells(i, G_AD).Value), ad, vbTextCompare) = 0 _
+        And CLng(Val(ws.Cells(i, G_SIRA).Value)) = sira Then
+            SatirdakiGorevID = CLng(Val(ws.Cells(i, G_ID).Value))
+            Exit Function
+        End If
+    Next i
+End Function

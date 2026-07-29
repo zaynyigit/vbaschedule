@@ -1,0 +1,47 @@
+' =============================================================================
+' BU KOD BIR MODUL DEGILDIR - ICE AKTARILMAZ.
+'
+' VBA duzenleyicide sol taraftaki agactan "ThisWorkbook" (veya "BuCalismaKitabi")
+' ogesine CIFT TIKLA ve asagidaki kodu acilan pencereye YAPISTIR.
+' =============================================================================
+Option Explicit
+
+'------------------------------------------------------------------------------
+' Dosya acildiginda giris ekranini goster
+'------------------------------------------------------------------------------
+Private Sub Workbook_Open()
+    On Error Resume Next
+
+    ' Kurulum yapilmamissa uyar
+    Dim ws As Worksheet
+    Set ws = Nothing
+    Set ws = ThisWorkbook.Worksheets(SH_CIZELGE)
+    If ws Is Nothing Then
+        MsgBox "Bu dosyada kurulum yapilmamis." & vbCrLf & vbCrLf & _
+               "Alt+F8 -> Kurulum makrosunu calistir.", vbInformation, APP_ADI
+        Exit Sub
+    End If
+
+    modGiris.GirisiGoster
+End Sub
+
+'------------------------------------------------------------------------------
+' Kaydetmeden once oturumu kapat - dosya bir dahaki acilista giris istesin
+'------------------------------------------------------------------------------
+Private Sub Workbook_BeforeSave(ByVal SaveAsUI As Boolean, Cancel As Boolean)
+    On Error Resume Next
+    modVeri.AyarYaz AYAR_OTURUM, 0
+End Sub
+
+'------------------------------------------------------------------------------
+' Kapanirken gecici rapor sayfalarini temizle
+'------------------------------------------------------------------------------
+Private Sub Workbook_BeforeClose(Cancel As Boolean)
+    Dim ws As Worksheet
+    On Error Resume Next
+    Application.DisplayAlerts = False
+    For Each ws In ThisWorkbook.Worksheets
+        If Left$(ws.Name, 7) = "_Rapor" Then ws.Delete
+    Next ws
+    Application.DisplayAlerts = True
+End Sub
