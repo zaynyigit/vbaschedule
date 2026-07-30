@@ -1,0 +1,1343 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gunluk Proje Cizelgesi — VBA onizleme</title>
+<style>
+/* ===========================================================================
+   Bu dosya VBA kodunun EKRAN KARSILIGIDIR. Olculer nokta (pt) cinsinden
+   modSabitler.bas'tan alinip 4/3 ile piksele cevrilmistir; renkler ayni hex
+   kodlaridir. Amac: Excel'i acmadan yerlesimi ve etkilesimi test etmek.
+   =========================================================================== */
+:root{
+  --font: "Segoe UI", "Segoe UI Web (West European)", Tahoma, system-ui, sans-serif;
+  --zemin:#FFFFFF; --zemin-alt:#FCFDFF; --baslik-zemin:#F6F8FC; --cizgi:#EAEEF4;
+  --metin:#1B2230; --metin-soluk:#7C8598; --haftasonu:#E9EDF4; --tatil:#D9DFE9;
+  --bugun-zemin:#FEF2F2; --bugun-cizgi:#DC2626; --koyu-bant:#111827;
+  --tamam:#16A34A; --devam:#F59E0B; --plan:#94A3B8; --gecikme:#DC2626;
+  --panel-zemin:#0E1116; --panel-kart:#161A21; --panel-giris:#171C24;
+  --panel-kenar:#2C3340; --panel-yazi:#D7DDE8; --panel-etiket:#7A8394;
+  --mor:#4F46E5;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:#20242c;font-family:var(--font);color:var(--metin)}
+body{overflow:hidden;height:100vh}
+
+/* --- Excel penceresi taklidi --------------------------------------------- */
+#excel{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--zemin)}
+#sheet{flex:1;overflow:auto;position:relative;background:var(--zemin)}
+#grid{position:relative}
+
+.row{display:flex;align-items:stretch;white-space:nowrap}
+.cell{flex:0 0 auto;overflow:hidden;display:flex;align-items:center;
+      font-size:12px;background:var(--zemin);position:relative}
+.cell.c{justify-content:center;text-align:center}
+.cell.r{justify-content:flex-end;text-align:right}
+.pad{padding-left:6px}
+
+/* dondurulmus bolme: sol blok + ust basliklar */
+.frz{position:sticky;z-index:3}
+.row.head{position:sticky;z-index:4}
+.row.head .frz{z-index:6}
+
+#body{position:relative}
+
+/* --- arac cubugu --------------------------------------------------------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;
+     height:29.33px;border:1px solid #DFE5EE;background:#F2F5FA;color:#47536B;
+     border-radius:5px;font-size:10.67px;font-weight:600;cursor:pointer;
+     user-select:none;white-space:nowrap}
+.btn:hover{background:#E8EEF8}
+.btn:active{transform:translateY(1px)}
+
+/* --- gun hucreleri ------------------------------------------------------- */
+.gun{border-right:0}
+.gun.we{background:#F3F6FA}
+.gun.off{background:#E6EAF1}
+.gun.today{background:var(--bugun-zemin)}
+.gunno{cursor:pointer}
+.gunno:hover{outline:1.5px solid #C7D2E4;outline-offset:-1.5px}
+
+/* --- barlar -------------------------------------------------------------- */
+.days{position:relative;flex:0 0 auto;display:flex}
+.bar{position:absolute;border-radius:8.67px;display:flex;align-items:center;
+     cursor:pointer;overflow:hidden}
+.bar span{font-size:10px;font-weight:600;padding-left:4px;white-space:nowrap}
+.bar.plan{border:1.33px solid rgba(148,163,184,.65)}
+.cap{position:absolute;background:var(--plan)}
+.slipline{position:absolute;cursor:pointer;
+  background:repeating-linear-gradient(to right,var(--gecikme) 0 7px,transparent 7px 10px,
+             var(--gecikme) 10px 12px,transparent 12px 15px)}
+.slipcap{position:absolute;background:var(--gecikme);cursor:pointer}
+.slipdot{position:absolute;border-radius:50%;background:#fff;
+         border:2.67px solid var(--gecikme);box-sizing:border-box}
+.sliplbl{position:absolute;font-size:9.33px;font-weight:700;color:var(--gecikme);
+         cursor:pointer;line-height:16px}
+.badge{position:absolute;width:16px;height:16px;border-radius:50%;background:#0F172A;
+       color:#fff;font-size:8.67px;font-weight:700;display:flex;align-items:center;
+       justify-content:center;cursor:pointer;z-index:2}
+#todayline{position:absolute;width:2.33px;background:var(--bugun-cizgi);z-index:2;
+           pointer-events:none}
+
+/* --- avatarlar ----------------------------------------------------------- */
+.avwrap{position:relative;width:100%;height:100%}
+.av{position:absolute;border-radius:50%;border:1.67px solid #fff;color:#fff;
+    font-size:8.67px;font-weight:700;display:flex;align-items:center;
+    justify-content:center;box-sizing:border-box}
+
+/* --- ilerleme halkasi ---------------------------------------------------- */
+.ringwrap{position:relative;width:100%;height:100%;display:flex;align-items:center;
+          justify-content:flex-end;padding-right:6px;font-size:11.33px;font-weight:700;
+          color:#28324A;background:#FBFCFE}
+.ring{position:absolute;border-radius:50%}
+.ring::after{content:"";position:absolute;inset:22%;border-radius:50%;background:#fff}
+
+/* --- kategori rozeti ----------------------------------------------------- */
+.kat{color:#fff;font-size:10px;font-weight:700;justify-content:center}
+
+/* --- modal panel (modModal karsiligi) ------------------------------------ */
+#panel{position:fixed;inset:0;background:var(--panel-zemin);z-index:50;
+       overflow:auto;display:none;font-family:var(--font)}
+#panel.on{display:block}
+.pwrap{padding:22px 0 40px 28px;max-width:640px}
+.ptitle{font-size:20px;font-weight:700;color:#E8EAF0;margin:0 0 14px}
+.psec{font-size:10px;font-weight:700;color:#6B7588;letter-spacing:.06em;
+      margin:18px 0 4px}
+.plabel{font-size:9.33px;font-weight:700;color:var(--panel-etiket);
+        letter-spacing:.04em;margin-bottom:3px}
+.pfield{margin-bottom:9px}
+.pin{width:410px;max-width:100%;background:var(--panel-giris);color:var(--panel-yazi);
+     border:1px solid var(--panel-kenar);font-family:var(--font);font-size:13.33px;
+     padding:5px 8px;height:29.33px;outline:none}
+.pin:focus{border-color:#4A5468}
+textarea.pin{height:69px;resize:vertical;line-height:1.45}
+.pro{width:410px;max-width:100%;background:#12161C;color:#8A93A3;
+     border:1px solid var(--panel-kenar);font-size:12px;padding:5px 8px;
+     white-space:pre-wrap;line-height:1.5;min-height:29.33px;max-height:253px;
+     overflow:auto}
+.pbtns{margin-top:20px;display:flex;gap:10.67px}
+.pbtn{height:40px;border:0;border-radius:6px;font-family:var(--font);font-size:12.67px;
+      font-weight:700;cursor:pointer}
+.pbtn.iptal{width:120px;background:#232936;color:#9AA3B2}
+.pbtn.tamam{width:173px;background:var(--mor);color:#fff}
+.pbtn.tehlike{background:var(--gecikme)}
+.ptelif{margin-top:26px;font-size:9.33px;color:#3C4454}
+
+/* --- giris ekrani (modGiris karsiligi) ----------------------------------- */
+#giris{position:fixed;inset:0;background:var(--panel-zemin);z-index:60;display:none}
+#giris.on{display:block}
+.gpanel{position:absolute;left:80px;top:66.67px;width:453.33px;height:426.67px;
+        background:var(--panel-kart);border:1px solid #232833;border-radius:16px}
+.glogo{position:absolute;left:42.67px;top:45.33px;width:58.67px;height:58.67px;
+       border-radius:13px;background:var(--mor);color:#fff;font-size:20px;font-weight:700;
+       display:flex;align-items:center;justify-content:center}
+.gt1{position:absolute;left:42.67px;top:122.67px;font-size:21.33px;font-weight:700;color:#E8EAF0}
+.gt2{position:absolute;left:42.67px;top:154.67px;font-size:12px;color:var(--panel-etiket)}
+.glbl{position:absolute;left:42.67px;font-size:9.33px;font-weight:700;
+      color:var(--panel-etiket);letter-spacing:.04em}
+.gin{position:absolute;left:42.67px;width:368px;height:37.33px;background:#0F1319;
+     color:var(--panel-yazi);border:1px solid var(--panel-kenar);font-family:var(--font);
+     font-size:14.67px;padding:0 10px;outline:none}
+.gbtn{position:absolute;left:42.67px;top:352px;width:368px;height:45.33px;
+      background:var(--mor);color:#fff;border:0;border-radius:8px;font-family:var(--font);
+      font-size:13.33px;font-weight:700;cursor:pointer}
+.gtelif{position:absolute;left:80px;top:514.67px;width:453.33px;text-align:center;
+        font-size:10.67px;color:#3C4454}
+.ghint{position:absolute;left:80px;top:546.67px;width:453.33px;text-align:center;
+       font-size:10.67px;color:#5A6478}
+
+/* --- onizleme yardim seridi (Excel'de yoktur) ---------------------------- */
+#yardim{flex:0 0 auto;background:#1B1F27;color:#8A93A3;font-size:11px;
+        padding:5px 12px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+#yardim b{color:#C6CEDC;font-weight:600}
+#yardim .tag{background:#262C36;padding:2px 6px;border-radius:3px;color:#9AA3B2}
+</style>
+</head>
+<body>
+
+<div id="excel">
+  <div id="sheet"><div id="grid"></div></div>
+  <div id="yardim">
+    <span class="tag">onizleme seridi (Excel'de yok)</span>
+    <span><b>cift tik</b> gun hucresi → gorev ekle</span>
+    <span><b>cift tik</b> gorev adi → duzenle</span>
+    <span><b>cift tik</b> gun numarasi → idari tatil</span>
+    <span><b>tik</b> bar / rozet → detay + yorum</span>
+    <span><b>tik</b> kirmizi serit → gecikme</span>
+    <span><b>sag tik</b> gorev satiri → menu</span>
+  </div>
+</div>
+
+<div id="panel"></div>
+<div id="giris"></div>
+
+<script>
+"use strict";
+/* ===========================================================================
+   1. SABITLER  —  modSabitler.bas
+   =========================================================================== */
+const PT = 4/3;                                  // 1 nokta = 1.333 piksel
+const px = pt => pt * PT;
+
+const APP_ADI   = "Gunluk Proje Cizelgesi";
+const APP_TELIF = "Copyright by Yigit Bayir";
+
+const W = { SERIT:5, KATEGORI:62, SIRA:22, SORUMLU:66, GOREV:150, ONCEKI:118,
+            GUN:17, ILERLEME:56, ACIKLAMA:150 };
+const H = { SATIR:26, PROJE:22, AYADI:40, GUNHARF:14, GUNNO:17,
+            BASLIK:46, BOSLUK:6, EFSANE:20 };
+const GUN_SAYISI_MAX = 31;
+const AV_CAP = 3;
+
+const CLR = { TAMAM:"#16A34A", DEVAM:"#F59E0B", PLAN:"#94A3B8", GECIKME:"#DC2626",
+              KOYU:"#111827", BASLIK_ZEMIN:"#F6F8FC", ZEMIN_ALT:"#FCFDFF" };
+
+const DURUM = { PLAN:"plan", DEVAM:"devam", TAMAM:"tamam" };
+const ROL   = { ADMIN:"admin", KULLANICI:"kullanici" };
+const YETKI = { GOREV:"GorevEkle", YORUM:"Yorum", GECIKME:"Gecikme", KULLANICI:"KullaniciYonet" };
+
+const SOL_BLOK = W.SERIT + W.KATEGORI + W.SIRA + W.SORUMLU + W.GOREV + W.ONCEKI;
+
+function durumRengi(d){
+  if (d === DURUM.TAMAM) return CLR.TAMAM;
+  if (d === DURUM.DEVAM) return CLR.DEVAM;
+  return CLR.PLAN;
+}
+function ayAdi(ay){
+  return ["OCAK","SUBAT","MART","NISAN","MAYIS","HAZIRAN",
+          "TEMMUZ","AGUSTOS","EYLUL","EKIM","KASIM","ARALIK"][ay-1] || "?";
+}
+// Weekday(t, vbMonday): 1=Pazartesi .. 7=Pazar
+function haftaninGunu(d){ return ((d.getDay() + 6) % 7) + 1; }
+function gunHarfi(n){ return ["P","S","C","P","C","C","P"][n-1] || "?"; }
+function haftaSonuMu(d){ return haftaninGunu(d) >= 6; }
+
+/* VBA Format$(x,"0") bankaci yuvarlamasi yapar: 52.5 -> "52", 53.5 -> "54" */
+function fmt0(x){
+  const f = Math.floor(x), r = x - f;
+  if (Math.abs(r - 0.5) < 1e-9) return String(f % 2 === 0 ? f : f + 1);
+  return String(Math.round(x));
+}
+function fmtTarih(d){
+  if (!d) return "";
+  const p = n => String(n).padStart(2,"0");
+  return p(d.getDate()) + "." + p(d.getMonth()+1) + "." + d.getFullYear();
+}
+function fmtSaat(d){
+  const p = n => String(n).padStart(2,"0");
+  return fmtTarih(d) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+function tarihCoz(s){                      // "dd.mm.yyyy" -> Date | null
+  const m = /^\s*(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})\s*$/.exec(s || "");
+  if (!m) return null;
+  const d = new Date(+m[3], +m[2]-1, +m[1]);
+  return (d.getMonth() === +m[2]-1) ? d : null;
+}
+const gun0 = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const gunFarki = (a,b) => Math.round((gun0(a) - gun0(b)) / 86400000);
+const ayinGunSayisi = (y,a) => new Date(y, a, 0).getDate();
+
+/* ===========================================================================
+   2. VERI  —  modKurulum.OrnekVeriYukle birebir
+   =========================================================================== */
+const BUGUN = gun0(new Date());
+const Y = BUGUN.getFullYear(), AY = BUGUN.getMonth() + 1;
+const g = (yil, ay, gun) => new Date(yil, ay-1, gun);
+
+const DB = {
+  ayarlar: { AktifYil:Y, AktifAy:AY, OturumKullaniciID:0,
+             SonGorevID:7, SonYorumID:0, SonGecikmeID:0, SonKullaniciID:7 },
+  kullanicilar: [
+    { ID:1, Ad:"Yigit Bayir", KullaniciAdi:"admin",      Parola:"1234", Rol:ROL.ADMIN,     Renk:"4F46E5" },
+    { ID:2, Ad:"Adem Kaya",   KullaniciAdi:"adem.kaya",  Parola:"1234", Rol:ROL.KULLANICI, Renk:"0891B2" },
+    { ID:3, Ad:"Merve Tunc",  KullaniciAdi:"merve.tunc", Parola:"1234", Rol:ROL.KULLANICI, Renk:"DB2777" },
+    { ID:4, Ad:"Selim Er",    KullaniciAdi:"selim.er",   Parola:"1234", Rol:ROL.KULLANICI, Renk:"16A34A" },
+    { ID:5, Ad:"Naz Demir",   KullaniciAdi:"naz.demir",  Parola:"1234", Rol:ROL.ADMIN,     Renk:"F59E0B" },
+    { ID:6, Ad:"Kaan Oz",     KullaniciAdi:"kaan.oz",    Parola:"1234", Rol:ROL.KULLANICI, Renk:"7C3AED" },
+    { ID:7, Ad:"Ece Gur",     KullaniciAdi:"ece.gur",    Parola:"1234", Rol:ROL.KULLANICI, Renk:"0EA5E9" }
+  ].map(u => Object.assign(u, {
+      YGorev: u.Rol === ROL.ADMIN, YYorum: true,
+      YGecikme: u.Rol === ROL.ADMIN, YKullanici: u.Rol === ROL.ADMIN,
+      Sayfa:"Cizelge", Aktif:true })),
+  projeler: [
+    { ID:1, Ad:"Veri Merkezi Tasima",     Renk:"4F46E5", Sira:1 },
+    { ID:2, Ad:"Son Kullanici Donusumu",  Renk:"0891B2", Sira:2 },
+    { ID:3, Ad:"Is Surekliligi",          Renk:"7C3AED", Sira:3 }
+  ],
+  kategoriler: [
+    { ID:1, Ad:"MAJOR", Renk:"4F46E5", Sira:1 },
+    { ID:2, Ad:"MINOR", Renk:"F59E0B", Sira:2 },
+    { ID:3, Ad:"VDI",   Renk:"0891B2", Sira:3 },
+    { ID:4, Ad:"BAKIM", Renk:"7C3AED", Sira:4 },
+    { ID:5, Ad:"ACIL",  Renk:"DC2626", Sira:5 }
+  ],
+  gorevler: [
+    { ID:1, ProjeID:1, KategoriID:1, Sira:1, Ad:"Sunucu gocu - faz 2",
+      Sorumlular:"1,2,4", OncekiAyNot:"Onceki aydan 2 gun devretti",
+      PlanBaslangic:g(Y,AY,1), PlanBitis:g(Y,AY,8), GerceklesenBitis:null,
+      Durum:DURUM.TAMAM, CubukYazisi:"Tooling", Yuzde:100,
+      Aciklama:"Devir teslim tamamlandi" },
+    { ID:2, ProjeID:1, KategoriID:1, Sira:2, Ad:"Omurga switch degisimi",
+      Sorumlular:"3,6", OncekiAyNot:"",
+      PlanBaslangic:g(Y,AY,6), PlanBitis:g(Y,AY,13), GerceklesenBitis:g(Y,AY,18),
+      Durum:DURUM.TAMAM, CubukYazisi:"Malzeme alimi", Yuzde:100,
+      Aciklama:"Tutanak imzalandi" },
+    { ID:3, ProjeID:1, KategoriID:2, Sira:3, Ad:"Kablolama denetimi",
+      Sorumlular:"5", OncekiAyNot:"",
+      PlanBaslangic:g(Y,AY,14), PlanBitis:g(Y,AY,17), GerceklesenBitis:null,
+      Durum:DURUM.DEVAM, CubukYazisi:"Saha", Yuzde:70, Aciklama:"3. kat kaldi" },
+    { ID:4, ProjeID:2, KategoriID:3, Sira:4, Ad:"Kullanici profil tasima",
+      Sorumlular:"4,5,7,2", OncekiAyNot:"",
+      PlanBaslangic:g(Y,AY,20), PlanBitis:g(Y,AY,31), GerceklesenBitis:null,
+      Durum:DURUM.DEVAM, CubukYazisi:"Migrasyon", Yuzde:45,
+      Aciklama:"120 profilin 54'u tasindi" },
+    { ID:5, ProjeID:2, KategoriID:2, Sira:5, Ad:"Lisans yenileme",
+      Sorumlular:"1", OncekiAyNot:"Sozlesme onayi bekleniyor",
+      PlanBaslangic:g(Y,AY,15), PlanBitis:g(Y,AY,20), GerceklesenBitis:null,
+      Durum:DURUM.DEVAM, CubukYazisi:"Satin alma", Yuzde:60,
+      Aciklama:"Onay bekleniyor" },
+    { ID:6, ProjeID:3, KategoriID:1, Sira:6, Ad:"Yedekleme geri donus testi",
+      Sorumlular:"2,6", OncekiAyNot:"",
+      PlanBaslangic:g(Y,AY,27), PlanBitis:g(Y,AY,31), GerceklesenBitis:null,
+      Durum:DURUM.PLAN, CubukYazisi:"Test", Yuzde:0,
+      Aciklama:"Test ortami kuruluyor" },
+    { ID:7, ProjeID:3, KategoriID:1, Sira:7, Ad:"Felaket tatbikati",
+      Sorumlular:"7", OncekiAyNot:"",
+      PlanBaslangic:g(Y,AY,30), PlanBitis:new Date(Y,AY,6), GerceklesenBitis:null,
+      Durum:DURUM.PLAN, CubukYazisi:"Tatbikat", Yuzde:0,
+      Aciklama:"Sonraki aya sarkiyor" }
+  ],
+  yorumlar: [
+    { ID:1, GorevID:4, KullaniciID:4, Tarih:new Date(Y,AY-1,22,9,40),
+      Metin:"3. kattaki 18 profil tamam, kalanlar yarin. Agda yavaslama var." },
+    { ID:2, GorevID:4, KullaniciID:5, Tarih:new Date(Y,AY-1,22,11,15),
+      Metin:"Yavaslamayi ag ekibine ilettim, switch degisiminden olabilir." },
+    { ID:3, GorevID:4, KullaniciID:1, Tarih:new Date(Y,AY-1,23,8,5),
+      Metin:"Go-Live tarihini sabit tutalim, gerekirse hafta sonu vardiya acariz." },
+    { ID:4, GorevID:3, KullaniciID:1, Tarih:new Date(Y,AY-1,18,16,30),
+      Metin:"Izin sureci uzadi, 3 gun ek sure gerekebilir." }
+  ],
+  gecikmeler: [
+    { ID:1, GorevID:2, Neden:"Tedarikci sevkiyati 4 gun gecikti, gumrukte bekledi.",
+      Sorumluluk:"Dis yuklenici", KaydedenID:1, Tarih:new Date(Y,AY-1,19,10,0) }
+  ],
+  offGunler: [ { Tarih:g(Y,AY,16), Aciklama:"Idari tatil" } ]
+};
+
+/* --- modVeri karsiliklari ------------------------------------------------ */
+const Veri = {
+  kullanici: id => DB.kullanicilar.find(u => u.ID === +id) || null,
+  kullaniciAdiylaBul: k => DB.kullanicilar.find(
+      u => (u.KullaniciAdi||"").toLowerCase() === (k||"").trim().toLowerCase()) || null,
+  proje: id => DB.projeler.find(p => p.ID === +id) || null,
+  kategori: id => DB.kategoriler.find(k => k.ID === +id) || null,
+  projeAdiylaBul: ad => DB.projeler.find(
+      p => p.Ad.toLowerCase() === (ad||"").trim().toLowerCase()) || null,
+  kategoriAdiylaBul: ad => DB.kategoriler.find(
+      k => k.Ad.toLowerCase() === (ad||"").trim().toLowerCase()) || null,
+  gorev: id => DB.gorevler.find(t => t.ID === +id) || null,
+  aktifKullanici: () => Veri.kullanici(DB.ayarlar.OturumKullaniciID),
+  yetkiVar(y){
+    const u = Veri.aktifKullanici();
+    if (!u) return false;
+    if (u.Rol === ROL.ADMIN) return true;
+    return { [YETKI.GOREV]:u.YGorev, [YETKI.YORUM]:u.YYorum,
+             [YETKI.GECIKME]:u.YGecikme, [YETKI.KULLANICI]:u.YKullanici }[y] === true;
+  },
+  yorumlari: id => DB.yorumlar.filter(y => y.GorevID === +id),
+  yorumSayisi: id => Veri.yorumlari(id).length,
+  yorumEkle(gorevID, metin){
+    DB.yorumlar.push({ ID: ++DB.ayarlar.SonYorumID, GorevID:+gorevID,
+      KullaniciID: DB.ayarlar.OturumKullaniciID, Tarih:new Date(), Metin:metin });
+  },
+  gecikmeKaydi: id => DB.gecikmeler.find(x => x.GorevID === +id) || null,
+  gecikmeKaydet(gorevID, neden, sorumluluk){
+    let r = Veri.gecikmeKaydi(gorevID);
+    if (!r){ r = { ID: ++DB.ayarlar.SonGecikmeID, GorevID:+gorevID }; DB.gecikmeler.push(r); }
+    r.Neden = neden; r.Sorumluluk = sorumluluk;
+    r.KaydedenID = DB.ayarlar.OturumKullaniciID; r.Tarih = new Date();
+  },
+  offGunMu: d => DB.offGunler.some(o => +o.Tarih === +gun0(d)),
+  offGunDegistir(d){
+    const i = DB.offGunler.findIndex(o => +o.Tarih === +gun0(d));
+    if (i >= 0) DB.offGunler.splice(i,1);
+    else DB.offGunler.push({ Tarih: gun0(d), Aciklama:"Idari tatil" });
+  },
+  // modVeri.GecikmeGunu
+  gecikmeGunu(t){
+    let bitis;
+    if (t.GerceklesenBitis) bitis = t.GerceklesenBitis;
+    else if (t.Durum !== DURUM.TAMAM && BUGUN > t.PlanBitis) bitis = BUGUN;
+    else return 0;
+    return bitis > t.PlanBitis ? gunFarki(bitis, t.PlanBitis) : 0;
+  },
+  gorevSil(id){
+    DB.gorevler = DB.gorevler.filter(t => t.ID !== +id);
+    DB.yorumlar = DB.yorumlar.filter(y => y.GorevID !== +id);
+    DB.gecikmeler = DB.gecikmeler.filter(x => x.GorevID !== +id);
+  },
+  // modVeri.AyinGorevleriniOku
+  ayinGorevleri(yil, ay){
+    const ayBas = g(yil,ay,1), aySon = g(yil,ay,ayinGunSayisi(yil,ay));
+    return DB.gorevler.filter(t => {
+      let bitis = t.GerceklesenBitis || t.PlanBitis;
+      if (bitis < t.PlanBitis) bitis = t.PlanBitis;
+      return t.PlanBaslangic <= aySon && bitis >= ayBas;
+    }).map(t => Object.assign({}, t, { YorumAdedi: Veri.yorumSayisi(t.ID) }))
+      .sort((a,b) => a.Sira - b.Sira);
+  }
+};
+
+/* modCizelge.BasHarfler / SorumluOzeti */
+function basHarfler(ad){
+  const p = (ad||"").trim().split(/\s+/);
+  return (p.length > 1 ? p[0][0] + p[p.length-1][0] : (ad||"").trim().slice(0,2)).toUpperCase();
+}
+function sorumluOzeti(liste){
+  if (!liste || !liste.trim()) return "Sorumlu atanmamis";
+  const ids = liste.split(",");
+  let s = "SORUMLULAR (" + ids.length + " kisi)\n";
+  ids.forEach(id => { const u = Veri.kullanici(id);
+    if (u) s += "\n• " + u.Ad + (u.Rol === ROL.ADMIN ? "  (admin)" : ""); });
+  return s;
+}
+function idlerdenAdlar(ids){
+  if (!ids || !ids.trim()) return "";
+  return ids.split(",").map(i => Veri.kullanici(i)).filter(Boolean)
+            .map(u => u.Ad).join(", ");
+}
+function adlardanIDler(adlar){
+  const bulunamayan = [];
+  if (!adlar || !adlar.trim()) return { ids:"", bulunamayan:[] };
+  const out = [];
+  adlar.split(",").forEach(ad => {
+    ad = ad.trim(); if (!ad) return;
+    const u = DB.kullanicilar.find(x =>
+      x.Ad.toLowerCase() === ad.toLowerCase() ||
+      x.KullaniciAdi.toLowerCase() === ad.toLowerCase());
+    if (u) out.push(u.ID); else bulunamayan.push(ad);
+  });
+  return { ids: out.join(","), bulunamayan };
+}
+const durumEtiketi = k => k === DURUM.TAMAM ? "Tamamlandi"
+                        : k === DURUM.DEVAM ? "Devam ediyor" : "Planlandi";
+const durumKodu = e => /tamam/i.test(e) ? DURUM.TAMAM
+                     : /devam/i.test(e) ? DURUM.DEVAM : DURUM.PLAN;
+
+/* ===========================================================================
+   3. CIZIM  —  modCizelge.Ciz
+   =========================================================================== */
+const el = (tag, cls, style, text) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (style) Object.assign(n.style, style);
+  if (text != null) n.textContent = text;
+  return n;
+};
+const cellStyle = (wpt, extra) =>
+  Object.assign({ width: px(wpt)+"px", minWidth: px(wpt)+"px", height:"100%" }, extra||{});
+
+function ciz(){
+  const grid = document.getElementById("grid");
+  grid.textContent = "";
+  const yil = DB.ayarlar.AktifYil, ay = DB.ayarlar.AktifAy;
+  const gunSayisi = ayinGunSayisi(yil, ay);
+  const tatil = {};
+  DB.offGunler.forEach(o => {
+    if (o.Tarih.getFullYear() === yil && o.Tarih.getMonth()+1 === ay)
+      tatil[o.Tarih.getDate()] = true;
+  });
+  const gunAlanW = gunSayisi * W.GUN;
+
+  /* --- satir 2: baslik + arac cubugu (Excel'de G sutunundan baslar, bu yuzden
+         saga kaydirinca kayar - VBA'daki durum birebir korundu) ------------ */
+  const r2 = el("div","row head", { top:"0", height:px(H.BASLIK)+"px",
+                                    background:"#fff", width:px(SOL_BLOK+gunAlanW+W.ILERLEME+W.ACIKLAMA)+"px" });
+  const solBaslik = el("div","frz cell", cellStyle(SOL_BLOK,
+      { left:"0", background:"#fff", flexDirection:"column", alignItems:"flex-start",
+        justifyContent:"center", paddingLeft:px(W.SERIT)+"px" }));
+  solBaslik.appendChild(el("div", null,
+      { fontSize:"20px", fontWeight:"700", color:"#0F1622", lineHeight:"1.1" }, APP_ADI));
+  const u = Veri.aktifKullanici();
+  solBaslik.appendChild(el("div", null, { fontSize:"10.67px", color:"var(--metin-soluk)" },
+      u ? (u.Ad + "  ·  " + (u.Rol === ROL.ADMIN ? "Yonetici" : "Kullanici") +
+           "     " + APP_TELIF) : APP_TELIF));
+  r2.appendChild(solBaslik);
+
+  const araclar = el("div","cell", cellStyle(gunAlanW + W.ILERLEME + W.ACIKLAMA,
+      { gap:px(5)+"px", paddingLeft:"0", justifyContent:"flex-start" }));
+  [["‹ Onceki ay",78,()=>ayKaydir(-1)],
+   ["Bugun",48,bugunAyi],
+   ["Sonraki ay ›",78,()=>ayKaydir(1)],
+   [null,10,null],
+   ["+ Gorev",62,()=>gorevEkleAc(BUGUN)],
+   ["Kullanicilar",72,kullaniciPaneliAc],
+   ["Kategoriler",72,kategoriPaneliAc],
+   ["Yazdir / PDF",80,baskiPaneliAc],
+   ["Cikis",46,oturumuKapat]].forEach(([t,w,fn]) => {
+     if (!t){ araclar.appendChild(el("div",null,{ width:px(w)+"px" })); return; }
+     const b = el("div","btn", { width:px(w)+"px" }, t);
+     b.onclick = fn; araclar.appendChild(b);
+   });
+  r2.appendChild(araclar);
+  grid.appendChild(r2);
+
+  grid.appendChild(el("div","row head", { top:px(H.BASLIK)+"px",
+      height:px(H.BOSLUK)+"px", background:"#fff" }));
+
+  /* --- satir 4: renk aciklama seridi ---------------------------------------*/
+  const rEf = el("div","row head", { top:px(H.BASLIK+H.BOSLUK)+"px",
+      height:px(H.EFSANE)+"px", background:"#fff" });
+  rEf.appendChild(el("div","frz cell", cellStyle(SOL_BLOK, { left:"0", background:"#fff" })));
+  const efs = el("div","cell", cellStyle(gunAlanW + W.ILERLEME + W.ACIKLAMA,
+      { justifyContent:"flex-start", position:"relative", display:"block" }));
+  [["Tamamlandi","16A34A"],["Devam ediyor","F59E0B"],["Planlandi","94A3B8"],
+   ["Hafta sonu","E9EDF4"],["Idari tatil","D9DFE9"],["Bugun","DC2626"]]
+   .forEach(([ad,renk], i) => {
+     efs.appendChild(el("div",null,{ position:"absolute", left:px(i*5*W.GUN)+"px",
+       top:"50%", transform:"translateY(-50%)", fontSize:"10px", fontWeight:"700",
+       color:"#"+renk, whiteSpace:"nowrap" }, "■ " + ad));
+   });
+  rEf.appendChild(efs);
+  grid.appendChild(rEf);
+
+  grid.appendChild(el("div","row head", { top:px(H.BASLIK+H.BOSLUK+H.EFSANE)+"px",
+      height:px(H.BOSLUK)+"px", background:"#fff" }));
+
+  /* --- satir 6-8: takvim basligi ------------------------------------------*/
+  const ustBlok = H.BASLIK + H.BOSLUK + H.EFSANE + H.BOSLUK;
+  const rAy = el("div","row head", { top:px(ustBlok)+"px", height:px(H.AYADI)+"px" });
+  const bl = el("div","frz", Object.assign(cellStyle(SOL_BLOK,{ left:"0" }),
+      { display:"flex", height:px(H.AYADI+H.GUNHARF+H.GUNNO)+"px" }));
+  [[W.SERIT,""],[W.KATEGORI,"KATEGORI"],[W.SIRA,"#"],[W.SORUMLU,"SORUMLU"],
+   [W.GOREV,"GOREV"],[W.ONCEKI,"ONCEKI AYDAN KALAN"]].forEach(([w,t]) => {
+     bl.appendChild(el("div","cell pad", cellStyle(w,
+       { background:CLR.BASLIK_ZEMIN, fontSize:"10px", fontWeight:"700",
+         color:"#59637A", height:"100%" }), t));
+   });
+  rAy.appendChild(bl);
+  rAy.appendChild(el("div","cell c", cellStyle(gunAlanW,
+      { background:CLR.KOYU, color:"#fff", fontSize:"24px", fontWeight:"700",
+        letterSpacing:".02em" }), ayAdi(ay) + "   " + yil));
+  rAy.appendChild(el("div","cell pad", cellStyle(W.ILERLEME,
+      { background:CLR.BASLIK_ZEMIN, fontSize:"10px", fontWeight:"700",
+        color:"#59637A", height:px(H.AYADI+H.GUNHARF+H.GUNNO)+"px" }), "ILERLEME"));
+  rAy.appendChild(el("div","cell pad", cellStyle(W.ACIKLAMA,
+      { background:CLR.BASLIK_ZEMIN, fontSize:"10px", fontWeight:"700",
+        color:"#59637A", height:px(H.AYADI+H.GUNHARF+H.GUNNO)+"px" }), "ACIKLAMA"));
+  grid.appendChild(rAy);
+
+  // gun harfleri
+  const rHarf = el("div","row head", { top:px(ustBlok+H.AYADI)+"px",
+      height:px(H.GUNHARF)+"px", marginLeft:px(SOL_BLOK)+"px" });
+  for (let d=1; d<=gunSayisi; d++){
+    const t = g(yil,ay,d);
+    const arka = tatil[d] ? "#D9DFE9" : haftaSonuMu(t) ? "#E9EDF4" : CLR.BASLIK_ZEMIN;
+    rHarf.appendChild(el("div","cell c", cellStyle(W.GUN,
+      { background:arka, fontSize:"9.33px", fontWeight:"700", color:"#6B7588" }),
+      gunHarfi(haftaninGunu(t))));
+  }
+  grid.appendChild(rHarf);
+
+  // gun numaralari
+  const rNo = el("div","row head", { top:px(ustBlok+H.AYADI+H.GUNHARF)+"px",
+      height:px(H.GUNNO)+"px", marginLeft:px(SOL_BLOK)+"px" });
+  for (let d=1; d<=gunSayisi; d++){
+    const t = g(yil,ay,d);
+    let arka = tatil[d] ? "#D9DFE9" : haftaSonuMu(t) ? "#E9EDF4" : CLR.ZEMIN_ALT;
+    let renk = "#28324A";
+    if (+t === +BUGUN){ arka = "#FEE2E2"; renk = "#B91C1C"; }
+    const c = el("div","cell c gunno", cellStyle(W.GUN,
+      { background:arka, fontSize:"12px", fontWeight:"700", color:renk }), String(d));
+    c.title = "Cift tik: idari tatil isaretle / kaldir";
+    c.ondblclick = () => gunBasligiTiklandi(t);
+    rNo.appendChild(c);
+  }
+  grid.appendChild(rNo);
+
+  /* --- govde ------------------------------------------------------------- */
+  const body = el("div", null, { position:"relative" });
+  body.id = "body";
+  let satirSayisi = 0;
+
+  const gorevler = Veri.ayinGorevleri(yil, ay);
+  DB.projeler.forEach(p => {
+    const liste = gorevler.filter(t => t.ProjeID === p.ID);
+    if (!liste.length) return;
+
+    let toplam = 0, pIlk = GUN_SAYISI_MAX+1, pSon = 0;
+    liste.forEach(t => {
+      toplam += t.Yuzde;
+      const a = ayIcindekiAralik(t, yil, ay, gunSayisi);
+      if (a.ilk > 0){ if (a.ilk < pIlk) pIlk = a.ilk; if (a.son > pSon) pSon = a.son; }
+    });
+    body.appendChild(projeSatiri(p, liste.length, gunSayisi, pIlk, pSon, toplam/liste.length));
+    satirSayisi++;
+    liste.forEach(t => { body.appendChild(gorevSatiri(t, p, yil, ay, gunSayisi, tatil));
+                         satirSayisi++; });
+  });
+
+  if (!satirSayisi){
+    const r = el("div","row", { height:px(H.SATIR)+"px" });
+    r.appendChild(el("div","frz cell", cellStyle(SOL_BLOK, { left:"0" })));
+    r.appendChild(el("div","cell pad", cellStyle(gunAlanW,
+      { fontStyle:"italic", color:"var(--metin-soluk)" }),
+      "Bu ayda gorev yok. Bir gun hucresine cift tiklayarak ekleyebilirsin."));
+    body.appendChild(r);
+  }
+
+  // bugun cizgisi
+  if (BUGUN.getFullYear() === yil && BUGUN.getMonth()+1 === ay && satirSayisi){
+    const line = el("div", null, {
+      left: px(SOL_BLOK + (BUGUN.getDate()-1)*W.GUN + W.GUN/2 - 0.875)+"px",
+      top:"0", bottom:"0" });
+    line.id = "todayline";
+    body.appendChild(line);
+  }
+  grid.appendChild(body);
+
+  // Excel'deki 60 satirlik bos tampon
+  grid.appendChild(el("div", null, { height:px(H.SATIR*4)+"px" }));
+}
+
+/* modCizelge.AyIcindekiAralik */
+function ayIcindekiAralik(t, yil, ay, gunSayisi){
+  const ayBas = g(yil,ay,1), aySon = g(yil,ay,gunSayisi);
+  let b = t.PlanBaslangic, s = t.PlanBitis;
+  if (t.GerceklesenBitis){ if (t.GerceklesenBitis > s) s = t.GerceklesenBitis; }
+  else if (t.Durum !== DURUM.TAMAM && BUGUN > s) s = BUGUN;
+  if (b > aySon || s < ayBas) return { ilk:0, son:0 };
+  if (b < ayBas) b = ayBas;
+  if (s > aySon) s = aySon;
+  return { ilk:b.getDate(), son:s.getDate() };
+}
+/* modCizelge.GunAraligi */
+function gunAraligi(bas, bit, yil, ay, gunSayisi){
+  const ayBas = g(yil,ay,1), aySon = g(yil,ay,gunSayisi);
+  if (bas > aySon || bit < ayBas) return { ilk:0, son:0 };
+  if (bas < ayBas) bas = ayBas;
+  if (bit > aySon) bit = aySon;
+  return { ilk:bas.getDate(), son:bit.getDate() };
+}
+
+function halka(yuzde, renk, capPt){
+  const w = el("div","ringwrap", null);
+  const r = el("div","ring", {
+    width:px(capPt)+"px", height:px(capPt)+"px",
+    left: px(Math.max(2, (W.ILERLEME - capPt)/2 - 8))+"px",
+    top: "50%", transform:"translateY(-50%)",
+    background: yuzde >= 99.5
+      ? renk
+      : `conic-gradient(${renk} 0 ${yuzde}%, #E8EDF4 ${yuzde}% 100%)` });
+  w.appendChild(r);
+  w.appendChild(el("span", null, null, "%" + fmt0(yuzde)));
+  return w;
+}
+
+function projeSatiri(p, adet, gunSayisi, pIlk, pSon, yuzde){
+  const r = el("div","row", { height:px(H.PROJE)+"px" });
+  const sol = el("div","frz", Object.assign(cellStyle(SOL_BLOK,{ left:"0" }), { display:"flex" }));
+  sol.appendChild(el("div","cell", cellStyle(W.SERIT, { background:"#"+p.Renk })));
+  sol.appendChild(el("div","cell pad", cellStyle(W.KATEGORI+W.SIRA+W.SORUMLU+W.GOREV+W.ONCEKI,
+    { background:"#F8FAFD", fontSize:"12px", fontWeight:"700", color:"#111827" }),
+    p.Ad.toUpperCase() + "     " + adet + " gorev"));
+  r.appendChild(sol);
+
+  const days = el("div","days", { width:px(gunSayisi*W.GUN)+"px", background:"#F8FAFD" });
+  for (let d=1; d<=gunSayisi; d++) days.appendChild(el("div","cell",
+    cellStyle(W.GUN, { background:"transparent" })));
+  if (pIlk > 0 && pSon >= pIlk){
+    const sol1 = (pIlk-1)*W.GUN + 1, gen = (pSon-pIlk+1)*W.GUN - 2;
+    days.appendChild(el("div", null, { position:"absolute", left:px(sol1)+"px",
+      top:"50%", marginTop:px(-3)+"px", width:px(gen)+"px", height:px(6)+"px",
+      background:"#"+p.Renk, opacity:".38", borderRadius:px(3)+"px" }));
+  }
+  r.appendChild(days);
+
+  const ring = el("div","cell", cellStyle(W.ILERLEME, { background:"#FBFCFE" }));
+  ring.appendChild(halka(yuzde, "#"+p.Renk, 15));
+  r.appendChild(ring);
+  r.appendChild(el("div","cell", cellStyle(W.ACIKLAMA, { background:"#F8FAFD" })));
+  return r;
+}
+
+function gorevSatiri(t, p, yil, ay, gunSayisi, tatil){
+  const kat = Veri.kategori(t.KategoriID) || { Ad:"", Renk:"64748B" };
+  const renk = durumRengi(t.Durum);
+  const r = el("div","row", { height:px(H.SATIR)+"px" });
+
+  /* --- sol blok --- */
+  const sol = el("div","frz", Object.assign(cellStyle(SOL_BLOK,{ left:"0" }), { display:"flex" }));
+  sol.appendChild(el("div","cell", cellStyle(W.SERIT, { background:"#"+p.Renk })));
+  sol.appendChild(el("div","cell kat", cellStyle(W.KATEGORI,
+    { background:"#"+kat.Renk }), kat.Ad));
+  sol.appendChild(el("div","cell c", cellStyle(W.SIRA,
+    { color:"var(--metin-soluk)", fontWeight:"700" }), String(t.Sira)));
+
+  // avatarlar
+  const avc = el("div","cell", cellStyle(W.SORUMLU));
+  const avw = el("div","avwrap");
+  avw.title = sorumluOzeti(t.Sorumlular);
+  const ids = (t.Sorumlular||"").split(",").filter(x => x.trim());
+  ids.slice(0, AV_CAP).forEach((id, i) => {
+    const usr = Veri.kullanici(id); if (!usr) return;
+    avw.appendChild(el("div","av", { left:px(4 + i*11)+"px", top:"50%",
+      marginTop:px(-7.5)+"px", width:px(15)+"px", height:px(15)+"px",
+      background:"#"+usr.Renk, zIndex:String(10-i) }, basHarfler(usr.Ad)));
+  });
+  if (ids.length > AV_CAP){
+    avw.appendChild(el("div","av", { left:px(4 + AV_CAP*11)+"px", top:"50%",
+      marginTop:px(-7.5)+"px", width:px(15)+"px", height:px(15)+"px",
+      background:"#E2E8F0", color:"#475569" }, "+" + (ids.length-AV_CAP)));
+  }
+  avc.appendChild(avw);
+  sol.appendChild(avc);
+
+  const adC = el("div","cell pad", cellStyle(W.GOREV, { fontWeight:"700", cursor:"pointer" }), t.Ad);
+  adC.title = "Cift tik: gorevi duzenle";
+  adC.ondblclick = () => gorevDuzenleAc(t.ID);
+  sol.appendChild(adC);
+
+  sol.appendChild(el("div","cell pad", cellStyle(W.ONCEKI,
+    { fontSize:"10.67px", color:"var(--metin-soluk)" }),
+    t.OncekiAyNot ? t.OncekiAyNot : "—"));
+
+  sol.oncontextmenu = e => { e.preventDefault(); satirMenusu(t.ID); };
+  r.appendChild(sol);
+
+  /* --- gun alani --- */
+  const days = el("div","days", { width:px(gunSayisi*W.GUN)+"px" });
+  for (let d=1; d<=gunSayisi; d++){
+    const tar = g(yil,ay,d);
+    let cls = "cell gun";
+    if (tatil[d]) cls += " off";
+    else if (haftaSonuMu(tar)) cls += " we";
+    else if (+tar === +BUGUN) cls += " today";
+    const c = el("div", cls, cellStyle(W.GUN));
+    c.title = "Cift tik: bu tarihte gorev ekle";
+    c.ondblclick = () => gorevEkleAc(tar);
+    days.appendChild(c);
+  }
+
+  // planlanan bar
+  const pa = gunAraligi(t.PlanBaslangic, t.PlanBitis, yil, ay, gunSayisi);
+  if (pa.ilk > 0){
+    const planlanan = (t.Durum === DURUM.PLAN);
+    const solPt = (pa.ilk-1)*W.GUN + 1.5;
+    let genPt = (pa.son-pa.ilk+1)*W.GUN - 3;
+    if (genPt < 4) genPt = 4;
+    const yukPt = 13;
+    const bar = el("div","bar" + (planlanan ? " plan" : ""), {
+      left:px(solPt)+"px", width:px(genPt)+"px", height:px(yukPt)+"px",
+      top:"50%", marginTop:px(-yukPt/2)+"px",
+      background: planlanan ? "rgba(148,163,184,.22)" : renk });
+    if (t.CubukYazisi && genPt > 40)
+      bar.appendChild(el("span", null, { color: planlanan ? "#64748B" : "#fff" }, t.CubukYazisi));
+    bar.onclick = () => detayAc(t.ID);
+    bar.title = t.Ad + "  ·  tik: detay ve yorumlar";
+    days.appendChild(bar);
+
+    if (planlanan){
+      [solPt, solPt + genPt - 2].forEach(x =>
+        days.appendChild(el("div","cap", { left:px(x)+"px", width:px(2)+"px",
+          height:px(yukPt+4)+"px", top:"50%", marginTop:px(-(yukPt+4)/2)+"px" })));
+    }
+    if (t.YorumAdedi > 0){
+      const b = el("div","badge", { left:px(solPt+genPt-9)+"px", top:"50%",
+        marginTop:px(-yukPt/2-4)+"px" }, String(t.YorumAdedi));
+      b.onclick = e => { e.stopPropagation(); detayAc(t.ID); };
+      b.title = t.YorumAdedi + " yorum";
+      days.appendChild(b);
+    }
+  }
+
+  // gecikme seridi
+  const gec = Veri.gecikmeGunu(t);
+  if (gec > 0){
+    const bitis = t.GerceklesenBitis || BUGUN;
+    const bas = new Date(t.PlanBitis); bas.setDate(bas.getDate()+1);
+    const ga = gunAraligi(bas, bitis, yil, ay, gunSayisi);
+    if (ga.ilk > 0){
+      const solPt = (ga.ilk-1)*W.GUN;
+      const sagPt = ga.son*W.GUN - 2;
+      const ac = () => gecikmePaneliAc(t.ID);
+
+      const l = el("div","slipline", { left:px(solPt)+"px", width:px(sagPt-solPt)+"px",
+        height:px(2.25)+"px", top:"50%", marginTop:px(-1.125)+"px" });
+      l.onclick = ac; l.title = "Gecikme: +" + gec + " gun  ·  tik: gecikme kaydi";
+      days.appendChild(l);
+
+      const c = el("div","slipcap", { left:px(sagPt-1)+"px", width:px(2.2)+"px",
+        height:px(14)+"px", top:"50%", marginTop:px(-7)+"px" });
+      c.onclick = ac; days.appendChild(c);
+
+      if (pa.son > 0){
+        days.appendChild(el("div","slipdot", { left:px(pa.son*W.GUN-6)+"px",
+          width:px(9)+"px", height:px(9)+"px", top:"50%", marginTop:px(-4.5)+"px" }));
+      }
+      const lb = el("div","sliplbl", { left:px(sagPt+2)+"px", top:"50%",
+        marginTop:px(-7)+"px" }, "+" + gec + "g");
+      lb.onclick = ac; days.appendChild(lb);
+    }
+  }
+  r.appendChild(days);
+
+  /* --- sag blok --- */
+  const ring = el("div","cell", cellStyle(W.ILERLEME));
+  ring.appendChild(halka(t.Yuzde, renk, 19));
+  r.appendChild(ring);
+  r.appendChild(el("div","cell pad", cellStyle(W.ACIKLAMA,
+    { fontSize:"10.67px", color:"#5D677A", background:"#FBFCFE" }), t.Aciklama));
+  return r;
+}
+
+/* ===========================================================================
+   4. PANEL MOTORU  —  modModal
+   =========================================================================== */
+const MT = { METIN:0, COKSATIR:1, SAYI:2, TARIH:3, LISTE:4, SALTOKUR:5,
+             BASLIK:6, ONAY:7 };
+const Modal = {
+  alanlar:[], amac:"", baglam:"", acik:false,
+  temizle(){ this.alanlar = []; this.amac = ""; this.baglam = ""; },
+  alan(etiket, tip, deger, secenekler){
+    this.alanlar.push({ etiket, tip, deger: deger == null ? "" : String(deger),
+                        secenekler: secenekler || "" });
+  },
+  deger(no){
+    const a = this.alanlar[no-1];
+    if (!a || !a.node) return "";
+    return a.node.value != null ? String(a.node.value) : "";
+  },
+  degerTarih(no){ return tarihCoz(this.deger(no)); },
+  degerSayi(no){ return parseFloat(String(this.deger(no)).replace(",", ".")) || 0; },
+  degerOnay(no){ return /^evet$/i.test(this.deger(no).trim()); },
+
+  goster(amac, baslik, tamamMetni, tehlikeli){
+    this.amac = amac; this.acik = true;
+    const p = document.getElementById("panel");
+    p.textContent = ""; p.classList.add("on");
+    const wrap = el("div","pwrap");
+    wrap.appendChild(el("h1","ptitle", null, baslik));
+
+    this.alanlar.forEach(a => {
+      if (a.tip === MT.BASLIK){
+        wrap.appendChild(el("div","psec", null, a.etiket.toUpperCase()));
+        return;
+      }
+      const f = el("div","pfield");
+      f.appendChild(el("div","plabel", null, a.etiket.toUpperCase()));
+      let n;
+      if (a.tip === MT.SALTOKUR){
+        n = el("div","pro", null, a.deger);
+        n.value = a.deger;
+      } else if (a.tip === MT.COKSATIR){
+        n = el("textarea","pin"); n.value = a.deger;
+      } else if (a.tip === MT.LISTE || a.tip === MT.ONAY){
+        n = el("select","pin");
+        const liste = a.tip === MT.ONAY ? "Evet,Hayir" : a.secenekler;
+        liste.split(",").filter(x => x !== "").forEach(o => {
+          const op = el("option", null, null, o.trim()); op.value = o.trim();
+          n.appendChild(op);
+        });
+        if (a.deger) n.value = a.deger;
+      } else {
+        n = el("input","pin");
+        n.type = "text";
+        n.value = a.deger;
+        if (a.tip === MT.TARIH) n.placeholder = "gg.aa.yyyy";
+        if (a.tip === MT.SAYI) n.inputMode = "numeric";
+      }
+      a.node = n;
+      f.appendChild(n);
+      wrap.appendChild(f);
+    });
+
+    const btns = el("div","pbtns");
+    const iptal = el("button","pbtn iptal", null, "Iptal");
+    iptal.onclick = () => Modal.kapat();
+    const tamam = el("button","pbtn tamam" + (tehlikeli ? " tehlike" : ""), null,
+                     tamamMetni || "Kaydet");
+    tamam.onclick = () => Modal.tamamTiklandi();
+    btns.appendChild(iptal); btns.appendChild(tamam);
+    wrap.appendChild(btns);
+    wrap.appendChild(el("div","ptelif", null, APP_TELIF));
+    p.appendChild(wrap);
+
+    const ilk = this.alanlar.find(a => a.node && a.tip !== MT.SALTOKUR);
+    if (ilk) setTimeout(() => ilk.node.focus(), 30);
+  },
+
+  tamamTiklandi(){
+    let ok = true;
+    switch (this.amac){
+      case "gorev_ekle":     ok = gorevKaydet(false); break;
+      case "gorev_duzenle":  ok = gorevKaydet(true);  break;
+      case "kullanici_ekle": ok = kullaniciKaydet();  break;
+      case "kategori_ekle":  ok = kategoriKaydet();   break;
+      case "gecikme":        ok = gecikmeKaydetPanel();break;
+      case "yorum":          ok = yorumKaydet();      break;
+      case "baski":          ok = baskiUygula();      break;
+    }
+    if (ok) this.kapat();
+  },
+  kapat(){
+    this.acik = false;
+    const p = document.getElementById("panel");
+    p.classList.remove("on"); p.textContent = "";
+  }
+};
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && Modal.acik) Modal.kapat();
+});
+
+/* ===========================================================================
+   5. GEZINME  —  modGezinme
+   =========================================================================== */
+function ayKaydir(adim){
+  let ay = DB.ayarlar.AktifAy + adim, yil = DB.ayarlar.AktifYil;
+  while (ay > 12){ ay -= 12; yil++; }
+  while (ay < 1){ ay += 12; yil--; }
+  DB.ayarlar.AktifAy = ay; DB.ayarlar.AktifYil = yil; ciz();
+}
+function bugunAyi(){
+  DB.ayarlar.AktifYil = BUGUN.getFullYear();
+  DB.ayarlar.AktifAy = BUGUN.getMonth()+1; ciz();
+}
+function gunBasligiTiklandi(t){
+  const mesaj = Veri.offGunMu(t)
+    ? fmtTarih(t) + " tatil isareti KALDIRILSIN mi?"
+    : fmtTarih(t) + " idari tatil olarak isaretlensin mi?";
+  if (confirm(mesaj)){ Veri.offGunDegistir(t); ciz(); }
+}
+function satirMenusu(gorevID){
+  const secim = prompt(
+    "Ne yapmak istiyorsun?\n\n" +
+    "  1 - Gorevi duzenle\n" +
+    "  2 - Yorumlari ac\n" +
+    "  3 - Gecikme kaydi\n" +
+    "  4 - Gorevi sil\n\n" +
+    "Numara gir:", "1");
+  switch ((secim||"").trim()){
+    case "1": gorevDuzenleAc(gorevID); break;
+    case "2": detayAc(gorevID); break;
+    case "3": gecikmePaneliAc(gorevID); break;
+    case "4": gorevSilSor(gorevID); break;
+  }
+}
+
+/* ===========================================================================
+   6. GOREV  —  modGorev
+   =========================================================================== */
+const A = { PROJE:1, KATEGORI:2, AD:3, SORUMLU:4, SIRA:5, BAS:6, PLANBIT:7,
+            GERCEK:8, DURUM:9, CUBUK:10, YUZDE:11, ONCEKI:12, ACIKLAMA:13 };
+const projeListesi = () => DB.projeler.map(p => p.Ad).join(",");
+const kategoriListesi = () => DB.kategoriler.map(k => k.Ad).join(",");
+const sonrakiSira = () => DB.gorevler.reduce((m,t) => Math.max(m, t.Sira), 0) + 1;
+
+function oturumGerekli(){
+  if (!DB.ayarlar.OturumKullaniciID){
+    alert("Bu islem icin once oturum acmalisin."); girisiGoster(); return false;
+  }
+  return true;
+}
+
+function gorevEkleAc(baslangic){
+  if (!oturumGerekli()) return;
+  if (!Veri.yetkiVar(YETKI.GOREV)){
+    alert("Gorev ekleme yetkin yok. Yoneticine basvur."); return;
+  }
+  Modal.temizle(); Modal.baglam = "";
+  Modal.alan("Proje", MT.LISTE, DB.projeler[0] && DB.projeler[0].Ad, projeListesi());
+  Modal.alan("Kategori", MT.LISTE, DB.kategoriler[0] && DB.kategoriler[0].Ad, kategoriListesi());
+  Modal.alan("Gorev adi", MT.METIN, "");
+  Modal.alan("Sorumlular (virgulle ayir)", MT.METIN, "");
+  Modal.alan("Sira no", MT.SAYI, sonrakiSira());
+  Modal.alan("Baslangic", MT.TARIH, fmtTarih(baslangic));
+  Modal.alan("Planlanan bitis", MT.TARIH, fmtTarih(baslangic));
+  Modal.alan("Gerceklesen bitis (bos = devam)", MT.TARIH, "");
+  Modal.alan("Durum", MT.LISTE, "Planlandi", "Planlandi,Devam ediyor,Tamamlandi");
+  Modal.alan("Cubuk yazisi", MT.METIN, "");
+  Modal.alan("Ilerleme %", MT.SAYI, "0");
+  Modal.alan("Onceki aydan kalan", MT.METIN, "");
+  Modal.alan("Aciklama", MT.COKSATIR, "");
+  Modal.goster("gorev_ekle", "Gorev ekle", "Gorevi ekle");
+}
+
+function gorevDuzenleAc(gorevID){
+  if (!oturumGerekli()) return;
+  const t = Veri.gorev(gorevID); if (!t) return;
+  const p = Veri.proje(t.ProjeID) || {Ad:""}, k = Veri.kategori(t.KategoriID) || {Ad:""};
+  Modal.temizle(); Modal.baglam = String(gorevID);
+  Modal.alan("Proje", MT.LISTE, p.Ad, projeListesi());
+  Modal.alan("Kategori", MT.LISTE, k.Ad, kategoriListesi());
+  Modal.alan("Gorev adi", MT.METIN, t.Ad);
+  Modal.alan("Sorumlular (virgulle ayir)", MT.METIN, idlerdenAdlar(t.Sorumlular));
+  Modal.alan("Sira no", MT.SAYI, t.Sira);
+  Modal.alan("Baslangic", MT.TARIH, fmtTarih(t.PlanBaslangic));
+  Modal.alan("Planlanan bitis", MT.TARIH, fmtTarih(t.PlanBitis));
+  Modal.alan("Gerceklesen bitis (bos = devam)", MT.TARIH,
+             t.GerceklesenBitis ? fmtTarih(t.GerceklesenBitis) : "");
+  Modal.alan("Durum", MT.LISTE, durumEtiketi(t.Durum), "Planlandi,Devam ediyor,Tamamlandi");
+  Modal.alan("Cubuk yazisi", MT.METIN, t.CubukYazisi);
+  Modal.alan("Ilerleme %", MT.SAYI, t.Yuzde);
+  Modal.alan("Onceki aydan kalan", MT.METIN, t.OncekiAyNot);
+  Modal.alan("Aciklama", MT.COKSATIR, t.Aciklama);
+  Modal.goster("gorev_duzenle", "Gorev duzenle - " + t.Ad, "Degisiklikleri kaydet");
+}
+
+function gorevKaydet(duzenleme){
+  let hata = "";
+  if (!Modal.deger(A.AD).trim()) hata = "Gorev adi bos birakilamaz.";
+  const bas = Modal.degerTarih(A.BAS), planBit = Modal.degerTarih(A.PLANBIT);
+  if (!hata && !bas) hata = "Baslangic tarihi gecerli degil.";
+  if (!hata && !planBit) hata = "Planlanan bitis tarihi gecerli degil.";
+  if (!hata && planBit < bas) hata = "Planlanan bitis, baslangictan once olamaz.";
+  let gercek = null;
+  if (Modal.deger(A.GERCEK).trim()){
+    gercek = Modal.degerTarih(A.GERCEK);
+    if (!hata && !gercek) hata = "Gerceklesen bitis tarihi gecerli degil.";
+    if (!hata && gercek < bas) hata = "Gerceklesen bitis, baslangictan once olamaz.";
+  }
+  if (!hata){
+    const yz = Modal.degerSayi(A.YUZDE);
+    if (yz < 0 || yz > 100) hata = "Ilerleme yuzdesi 0 ile 100 arasinda olmali.";
+  }
+  if (hata){ alert(hata); return false; }
+
+  const proje = Veri.projeAdiylaBul(Modal.deger(A.PROJE));
+  const kat = Veri.kategoriAdiylaBul(Modal.deger(A.KATEGORI));
+  if (!proje){ alert("Secilen proje bulunamadi."); return false; }
+  if (!kat){ alert("Secilen kategori bulunamadi."); return false; }
+
+  const sor = adlardanIDler(Modal.deger(A.SORUMLU));
+  if (sor.bulunamayan.length){
+    alert("Bu isimler kullanici listesinde yok, sorumlu olarak atanmadi:\n" +
+          "  " + sor.bulunamayan.join(", ") + "\n\n" +
+          "Kullanicilar panelinden ekleyip gorevi tekrar duzenleyebilirsin.");
+  }
+
+  const t = {
+    ProjeID: proje.ID, KategoriID: kat.ID, Ad: Modal.deger(A.AD).trim(),
+    Sorumlular: sor.ids, Sira: Math.round(Modal.degerSayi(A.SIRA)),
+    PlanBaslangic: bas, PlanBitis: planBit, GerceklesenBitis: gercek,
+    Durum: durumKodu(Modal.deger(A.DURUM)), CubukYazisi: Modal.deger(A.CUBUK),
+    Yuzde: Modal.degerSayi(A.YUZDE), OncekiAyNot: Modal.deger(A.ONCEKI),
+    Aciklama: Modal.deger(A.ACIKLAMA)
+  };
+  if (t.Durum === DURUM.TAMAM && !t.GerceklesenBitis) t.GerceklesenBitis = BUGUN;
+  if (t.Durum === DURUM.TAMAM) t.Yuzde = 100;
+
+  let id;
+  if (duzenleme){
+    id = +Modal.baglam;
+    Object.assign(Veri.gorev(id), t);
+  } else {
+    id = ++DB.ayarlar.SonGorevID;
+    DB.gorevler.push(Object.assign({ ID:id }, t));
+  }
+
+  const gec = Veri.gecikmeGunu(Veri.gorev(id));
+  ciz();
+  if (gec > 0 && !Veri.gecikmeKaydi(id)){
+    // Panel devrediliyor: false donuyoruz ki motor paneli hemen kapatmasin
+    if (gecikmePaneliAc(id)) return false;
+  }
+  return true;
+}
+
+function gorevSilSor(gorevID){
+  const t = Veri.gorev(gorevID); if (!t) return;
+  if (confirm("'" + t.Ad + "' gorevi ve tum yorumlari silinecek.\nEmin misin?")){
+    Veri.gorevSil(gorevID); ciz();
+  }
+}
+
+/* ===========================================================================
+   7. DETAY / YORUM  —  modYorum
+   =========================================================================== */
+const AY_ = { GOREV:1, PROJE:2, TARIHLER:3, SORUMLU:4, BASLIK:5, GECMIS:6, YENI:7 };
+
+function yorumGecmisi(gorevID){
+  const list = Veri.yorumlari(gorevID);
+  if (!list.length) return "Henuz yorum yok.";
+  return list.map(y => {
+    const u = Veri.kullanici(y.KullaniciID) || { Ad:"?" };
+    return u.Ad + "  ·  " + fmtSaat(y.Tarih) + "\n   " + y.Metin;
+  }).join("\n");
+}
+
+function detayAc(gorevID){
+  if (!oturumGerekli()) return;
+  const t = Veri.gorev(gorevID); if (!t) return;
+  const p = Veri.proje(t.ProjeID) || {Ad:""}, k = Veri.kategori(t.KategoriID) || {Ad:""};
+  const gec = Veri.gecikmeGunu(t);
+  const u = Veri.aktifKullanici();
+
+  let tarih = fmtTarih(t.PlanBaslangic) + "  →  " + fmtTarih(t.PlanBitis) + " (planlanan)";
+  if (t.GerceklesenBitis) tarih += "     Gerceklesen: " + fmtTarih(t.GerceklesenBitis);
+  if (gec > 0) tarih += "     SAPMA: +" + gec + " gun";
+
+  Modal.temizle(); Modal.baglam = String(gorevID);
+  Modal.alan("Gorev", MT.SALTOKUR, t.Ad + "   [" + durumEtiketi(t.Durum) + "]");
+  Modal.alan("Proje / Kategori / Ilerleme", MT.SALTOKUR,
+    p.Ad + "  ·  " + k.Ad + "  ·  %" + fmt0(t.Yuzde));
+  Modal.alan("Tarihler", MT.SALTOKUR, tarih);
+  Modal.alan("Sorumlular", MT.SALTOKUR, idlerdenAdlar(t.Sorumlular) || "—");
+  Modal.alan("Yorumlar", MT.BASLIK);
+  Modal.alan("Gecmis", MT.SALTOKUR, yorumGecmisi(gorevID));
+  Modal.alan((u ? u.Ad : "Misafir") + " olarak yorum yaz", MT.COKSATIR, "");
+  Modal.goster("yorum", "Gorev detayi", "Yorumu gonder");
+}
+
+function yorumKaydet(){
+  const gorevID = +Modal.baglam;
+  const metin = Modal.deger(AY_.YENI).trim();
+  if (!gorevID || !metin) return true;
+  if (!Veri.yetkiVar(YETKI.YORUM)){ alert("Yorum yapma yetkin yok."); return false; }
+  Veri.yorumEkle(gorevID, metin); ciz(); return true;
+}
+
+/* ===========================================================================
+   8. GECIKME  —  modGecikme
+   =========================================================================== */
+const AG = { GOREV:1, OZET:2, NEDEN:3, SORUMLULUK:4, BASLIK:5, GECMIS:6, NOT:7 };
+
+function gecikmePaneliAc(gorevID){
+  if (!oturumGerekli()) return false;
+  const t = Veri.gorev(gorevID); if (!t) return false;
+  const gec = Veri.gecikmeGunu(t);
+  if (gec <= 0){ alert("Bu gorevde gecikme yok."); return false; }
+
+  const r = Veri.gecikmeKaydi(gorevID);
+  const neden = r ? r.Neden : "";
+  const sorumluluk = (r && r.Sorumluluk) ? r.Sorumluluk : "Ic ekip";
+
+  Modal.temizle(); Modal.baglam = String(gorevID);
+  Modal.alan("Gorev", MT.SALTOKUR, t.Ad);
+  Modal.alan("Planlanan bitis  /  Gerceklesen  /  Sapma", MT.SALTOKUR,
+    fmtTarih(t.PlanBitis) + "        " +
+    (t.GerceklesenBitis ? fmtTarih(t.GerceklesenBitis) : "devam ediyor") +
+    "        +" + gec + " gun");
+  Modal.alan("Gecikme nedeni", MT.COKSATIR, neden);
+  Modal.alan("Sorumluluk", MT.LISTE, sorumluluk,
+    "Ic ekip,Dis yuklenici,Tedarikci,Musteri,Onay sureci,Diger");
+  Modal.alan("Konusma gecmisi", MT.BASLIK);
+  Modal.alan("Gecmis", MT.SALTOKUR, yorumGecmisi(gorevID));
+  Modal.alan("Not ekle (istege bagli)", MT.COKSATIR, "");
+  Modal.goster("gecikme", "⚠ Gecikme kaydi", "Gecikmeyi kaydet", true);
+  return true;
+}
+
+function gecikmeKaydetPanel(){
+  const gorevID = +Modal.baglam;
+  if (!gorevID) return true;
+  if (!Veri.yetkiVar(YETKI.GECIKME)){ alert("Gecikme kaydi girme yetkin yok."); return false; }
+  const neden = Modal.deger(AG.NEDEN).trim();
+  const sorumluluk = Modal.deger(AG.SORUMLULUK);
+  const ekNot = Modal.deger(AG.NOT).trim();
+  if (!neden){
+    alert("Gecikme nedenini yazmadan kaydedemezsin.\n" +
+          "Bu alan bos kalirsa cizelge neden geciktigini gostermez.");
+    return false;
+  }
+  Veri.gecikmeKaydet(gorevID, neden, sorumluluk);
+  if (ekNot) Veri.yorumEkle(gorevID, ekNot);
+  ciz(); return true;
+}
+
+/* ===========================================================================
+   9. KULLANICI / KATEGORI  —  modKullanici
+   =========================================================================== */
+const U = { AD:1, KADI:2, PAROLA:3, ROL:4, RENK:5, BASLIK:6, YGOREV:7, YYORUM:8,
+            YGECIKME:9, YKULLANICI:10, SAYFA:11, AKTIF:12, BASLIK2:13, LISTE:14 };
+const TK = { ADI:1, RENGI:2, BASLIK:3, LISTESI:4 };
+const rastgeleRenk = () => ["4F46E5","0891B2","DB2777","16A34A","F59E0B","7C3AED",
+  "0EA5E9","DC2626"][Math.floor(Math.random()*8)];
+
+function kullaniciListesiMetni(){
+  if (!DB.kullanicilar.length) return "Kayitli kullanici yok.";
+  return DB.kullanicilar.map(u =>
+    String(u.ID).padStart(2,"0") + "  " + u.Ad + "   (" + u.KullaniciAdi + ")   " +
+    (u.Rol === ROL.ADMIN ? "YONETICI" : "kullanici") +
+    (u.Aktif ? "" : "   [PASIF]")).join("\n");
+}
+function kategoriListesiMetni(){
+  if (!DB.kategoriler.length) return "Kayitli kategori yok.";
+  return DB.kategoriler.map(k => k.Ad + "   #" + k.Renk + "   " +
+    DB.gorevler.filter(t => t.KategoriID === k.ID).length + " gorev").join("\n");
+}
+
+function kullaniciPaneliAc(){
+  if (!oturumGerekli()) return;
+  if (!Veri.yetkiVar(YETKI.KULLANICI)){
+    alert("Kullanici yonetimi icin yonetici yetkisi gerekiyor."); return;
+  }
+  Modal.temizle(); Modal.baglam = "";
+  Modal.alan("Ad Soyad", MT.METIN, "");
+  Modal.alan("Kullanici adi", MT.METIN, "");
+  Modal.alan("Parola", MT.METIN, "");
+  Modal.alan("Rol", MT.LISTE, "Kullanici", "Kullanici,Yonetici");
+  Modal.alan("Avatar rengi (hex)", MT.METIN, rastgeleRenk());
+  Modal.alan("Yetkiler", MT.BASLIK);
+  Modal.alan("Gorev ekleyebilir", MT.ONAY, "Evet");
+  Modal.alan("Yorum yapabilir", MT.ONAY, "Evet");
+  Modal.alan("Gecikme kaydi girebilir", MT.ONAY, "Hayir");
+  Modal.alan("Kullanici yonetebilir", MT.ONAY, "Hayir");
+  Modal.alan("Erisebilecegi sayfa", MT.LISTE, "Cizelge", "Cizelge");
+  Modal.alan("Aktif", MT.ONAY, "Evet");
+  Modal.alan("Kayitli kullanicilar (" + DB.kullanicilar.length + ")", MT.BASLIK);
+  Modal.alan("Liste", MT.SALTOKUR, kullaniciListesiMetni());
+  Modal.goster("kullanici_ekle", "Kullanici ekle", "Kullaniciyi ekle");
+}
+
+function kullaniciKaydet(){
+  const ad = Modal.deger(U.AD).trim();
+  const kadi = Modal.deger(U.KADI).trim().toLowerCase();
+  const parola = Modal.deger(U.PAROLA);
+  const rol = /yonetici/i.test(Modal.deger(U.ROL)) ? ROL.ADMIN : ROL.KULLANICI;
+  let renk = Modal.deger(U.RENK).replace(/#/g,"").trim();
+
+  if (!ad){ alert("Ad Soyad bos birakilamaz."); return false; }
+  if (!kadi){ alert("Kullanici adi bos birakilamaz."); return false; }
+  if (/\s/.test(kadi)){ alert("Kullanici adi bosluk iceremez."); return false; }
+  if (parola.length < 4){ alert("Parola en az 4 karakter olmali."); return false; }
+  if (Veri.kullaniciAdiylaBul(kadi)){
+    alert("'" + kadi + "' kullanici adi zaten kayitli."); return false;
+  }
+  if (renk.length !== 6) renk = "64748B";
+
+  DB.kullanicilar.push({
+    ID: ++DB.ayarlar.SonKullaniciID, Ad:ad, KullaniciAdi:kadi, Parola:parola,
+    Rol:rol, Renk:renk,
+    YGorev: Modal.degerOnay(U.YGOREV), YYorum: Modal.degerOnay(U.YYORUM),
+    YGecikme: Modal.degerOnay(U.YGECIKME), YKullanici: Modal.degerOnay(U.YKULLANICI),
+    Sayfa: Modal.deger(U.SAYFA), Aktif: Modal.degerOnay(U.AKTIF) });
+
+  alert(ad + " eklendi.\nKullanici adi: " + kadi);
+  return true;
+}
+
+function kategoriPaneliAc(){
+  if (!oturumGerekli()) return;
+  if (!Veri.yetkiVar(YETKI.KULLANICI)){
+    alert("Kategori yonetimi icin yonetici yetkisi gerekiyor."); return;
+  }
+  Modal.temizle();
+  Modal.alan("Yeni kategori adi", MT.METIN, "");
+  Modal.alan("Rengi (hex)", MT.METIN, rastgeleRenk());
+  Modal.alan("Mevcut kategoriler", MT.BASLIK);
+  Modal.alan("Liste", MT.SALTOKUR, kategoriListesiMetni());
+  Modal.goster("kategori_ekle", "Kategoriler", "Kategoriyi ekle");
+}
+
+function kategoriKaydet(){
+  const ad = Modal.deger(TK.ADI).trim().toUpperCase();
+  let renk = Modal.deger(TK.RENGI).replace(/#/g,"").trim();
+  if (!ad) return true;
+  if (Veri.kategoriAdiylaBul(ad)){ alert("'" + ad + "' kategorisi zaten var."); return false; }
+  if (renk.length !== 6) renk = "64748B";
+  const yeni = DB.kategoriler.reduce((m,k) => Math.max(m,k.ID), 0) + 1;
+  DB.kategoriler.push({ ID:yeni, Ad:ad, Renk:renk, Sira:yeni });
+  ciz(); return true;
+}
+
+/* ===========================================================================
+   10. BASKI  —  modBaski
+   =========================================================================== */
+const B = { KAGIT:1, YON:2, SIGDIR:3, BASLIKTEKRAR:4, RENKLI:5, YORUMLAR:6, GECIKMELER:7 };
+
+function baskiPaneliAc(){
+  if (!oturumGerekli()) return;
+  Modal.temizle();
+  Modal.alan("Kagit boyutu", MT.LISTE, "A3", "A4,A3,A2,A1");
+  Modal.alan("Yon", MT.LISTE, "Yatay", "Yatay,Dikey");
+  Modal.alan("Sigdirma", MT.LISTE, "1 sayfaya sigdir",
+    "1 sayfaya sigdir,Genisligi 1 sayfa,Olcekleme yok");
+  Modal.alan("Baslik satirlari her sayfada tekrarlansin", MT.ONAY, "Evet");
+  Modal.alan("Renkli bas", MT.ONAY, "Evet");
+  Modal.alan("Yorumlari ek sayfa olarak bas", MT.ONAY, "Hayir");
+  Modal.alan("Gecikme nedenlerini ek sayfa olarak bas", MT.ONAY, "Evet");
+  Modal.goster("baski", "Yazdir / PDF'e aktar", "PDF olarak kaydet");
+}
+
+function baskiUygula(){
+  const kagit = Modal.deger(B.KAGIT);
+  // Excel'de A2/A1 ancak yazici surucusu sunuyorsa secilebilir. Onizlemede
+  // surucu yok sayilir, VBA'daki geri dusme mesaji birebir gosterilir.
+  if (kagit === "A2" || kagit === "A1"){
+    alert(kagit + " kagit boyutu bu bilgisayardaki yazici surucusunde yok.\n\n" +
+      "Cizelge A3 yatay olarak tek sayfaya sigdirildi. " + kagit +
+      " cikti icin iki secenek var:\n" +
+      "  1) A1 destekleyen bir yazici/plotter surucusu kur, sonra tekrar dene.\n" +
+      "  2) Bu A3 PDF'i matbaada " + kagit +
+      "'e buyutt. Vektorel oldugu icin kalite kaybi olmaz.");
+  }
+  const ekler = [];
+  if (Modal.degerOnay(B.GECIKMELER)) ekler.push("Gecikmeler");
+  if (Modal.degerOnay(B.YORUMLAR)) ekler.push("Yorumlar");
+  alert("Excel'de burada PDF kaydetme penceresi acilir.\n\n" +
+    "Kagit: " + kagit + " " + Modal.deger(B.YON).toLowerCase() + "\n" +
+    "Sigdirma: " + Modal.deger(B.SIGDIR) + "\n" +
+    "Baslik tekrari: " + (Modal.degerOnay(B.BASLIKTEKRAR) ? "acik" : "kapali") + "\n" +
+    "Ek sayfalar: " + (ekler.length ? ekler.join(" + ") : "yok") + "\n\n" +
+    "Onizlemede tarayicinin yazdirma penceresi aciliyor.");
+  setTimeout(() => window.print(), 100);
+  return true;
+}
+
+/* ===========================================================================
+   11. GIRIS  —  modGiris
+   =========================================================================== */
+function girisiGoster(){
+  DB.ayarlar.OturumKullaniciID = 0;
+  Modal.kapat();
+  const gr = document.getElementById("giris");
+  gr.textContent = ""; gr.classList.add("on");
+
+  const p = el("div","gpanel");
+  p.appendChild(el("div","glogo", null, "GX"));
+  p.appendChild(el("div","gt1", null, APP_ADI));
+  p.appendChild(el("div","gt2", null, "Devam etmek icin oturum ac"));
+  p.appendChild(el("div","glbl", { top:px(150)+"px" }, "KULLANICI ADI"));
+  p.appendChild(el("div","glbl", { top:px(208)+"px" }, "PAROLA"));
+
+  const inKadi = el("input","gin", { top:px(166)+"px" });
+  inKadi.type = "text"; inKadi.id = "txtKullanici"; inKadi.autocomplete = "off";
+  const inPar = el("input","gin", { top:px(224)+"px" });
+  inPar.type = "password"; inPar.id = "txtParola";
+  p.appendChild(inKadi); p.appendChild(inPar);
+
+  const b = el("button","gbtn", null, "Giris yap");
+  b.onclick = girisDenemesi;
+  p.appendChild(b);
+  gr.appendChild(p);
+  gr.appendChild(el("div","gtelif", null, APP_TELIF));
+  gr.appendChild(el("div","ghint", null,
+    "onizleme: admin / 1234  ·  yetkisiz kullanici icin adem.kaya / 1234"));
+
+  [inKadi, inPar].forEach(i => i.addEventListener("keydown",
+    e => { if (e.key === "Enter") girisDenemesi(); }));
+  setTimeout(() => inKadi.focus(), 40);
+}
+
+function girisDenemesi(){
+  const kadi = document.getElementById("txtKullanici").value.trim();
+  const parola = document.getElementById("txtParola").value;
+  if (!kadi){ alert("Kullanici adi bos birakilamaz."); return; }
+  const u = Veri.kullaniciAdiylaBul(kadi);
+  if (!u){ alert("Kullanici bulunamadi."); return; }
+  if (!u.Aktif){ alert("Bu kullanici pasif durumda."); return; }
+  if (u.Parola !== parola){ alert("Parola hatali."); return; }
+  DB.ayarlar.OturumKullaniciID = u.ID;
+  document.getElementById("giris").classList.remove("on");
+  ciz();
+}
+function oturumuKapat(){ girisiGoster(); }
+
+/* --- baslat -------------------------------------------------------------- */
+ciz();
+girisiGoster();
+</script>
+</body>
+</html>
